@@ -1,0 +1,7 @@
+per compilar:
+
+gfortran C:\gfortran\bin\codis_fortran\fisica_computacional\Pre_Practica_1\pre_practica_1.f90 -o C:\gfortran\bin\codis_fortran\fisica_computacional\Pre_Practica_1\pre_practica_1.exe
+
+per corre el codi:
+
+C:\gfortran\bin\codis_fortran\fisica_computacional\Pre_Practica_1\pre_practica_1.exe
