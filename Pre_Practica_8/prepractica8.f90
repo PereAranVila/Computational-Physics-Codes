@@ -1,0 +1,885 @@
+
+program prepractica8
+
+implicit none
+
+double precision schro1, schro2
+double precision f1, f2, fos1, fos2, fos3, fos4
+double precision h,x0,xf,y0
+integer num_file
+character (len = 100) name_file
+logical is_file, is_close
+
+double precision y01(1)
+double precision y04(4)
+
+! variables extra pel metode de tir
+double precision E, E1, E2
+integer n
+double precision y02(2)
+character(100) name_file_p1
+
+common/constants/E
+
+
+external f1, f2, fos1, fos2, fos3, fos4
+external schro1, schro2
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! TEST DE LA SUBROUTINA RK4_part AMB LA FUNCIO f1
+h = 0.01d0
+x0 = 1.d0
+xf = 100.d0
+y0 = 0.d0
+num_file = 1
+name_file = "valors-RK4.dat"
+is_file = .false.
+is_close = .false.
+
+call RK4_part(h,x0,xf,y0,f1,name_file,num_file,is_file,is_close)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! TEST DE LA SUBROUTINA RK4_part CAIGUDA LLIURE AMB FREGAMENT	!OK FUNCIONA
+
+h = 0.01d0
+x0 = 0.d0
+xf = 50.d0
+y0 = 0.d0
+num_file = 1
+name_file = "valors-RK4.dat"
+is_file = .true.
+is_close = .false.
+
+call RK4_part(h,x0,xf,y0,f2,name_file,num_file,is_file,is_close)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! TEST DE LA SUBROUTINA RK4 CAIGUDA LLIURE AMB FREGAMENT	!OK FUNCIONA
+
+h = 0.01d0
+x0 = 0.d0
+xf = 50.d0
+y01(1) = 0.d0
+num_file = 1
+name_file = "valors-RK4.dat"
+is_file = .true.
+is_close = .false.
+
+call RK4(h,x0,xf,y01,1,f2,f2,f2,f2,f2,name_file,num_file,is_file,is_close)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! TEST DE LA SUBROUTINA RK4 SISTEMA D'OSCILADORS ACBOLATS (PSIM)	! OK FUNCIONA
+
+h = 0.05d0
+x0 = 0.d0
+xf = 40.d0
+y04(1) = 0.d0
+y04(2) = 0.d0
+y04(3) = 1.d0
+y04(4) = 0.d0
+num_file = 1
+name_file = "valors-RK4.dat"
+is_file = .true.
+is_close = .true.
+
+call RK4(h,x0,xf,y04,4,fos1,fos2,fos3,fos4,fos4,name_file,num_file,is_file, &
+			is_close)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! TEST DE LA SUBROUTINA DEL METODE DE TIR
+E1 = 4.d0
+E2 = 5.d0
+y02(1) = 0.25d0
+y02(2) = 0.d0
+n = 200
+num_file = 66
+name_file = 'P8-22-23-res.dat'
+is_file = .false.
+is_close = .false.
+
+! HE FET EL TEST EXTRA DE RESOLDRE L'EQ.DIF. PER UN VALOR QUE ESTA AL CAMPUS
+! LES EQUACIONS ESTAN ESCRITES BE. OK!
+h = 0.01d0
+x0 = 0.d0
+xf = 1.d0
+name_file_p1 = 'tir-rK4.dat'
+
+E = 4.43d0
+call RK4(h,x0,xf,y02,2,schro1,schro2,schro2,schro2,schro2,name_file_p1,num_file, &
+			is_file, is_close)
+
+is_file = .true.
+is_close = .true.
+
+
+
+call metode_tir(E1,E2,schro1,schro2,n,num_file,name_file1,is_file,is_close)
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+end program prepractica8
+
+subroutine RK4_part(h,x0,xf,y0,f,name_file,num_file,is_file,is_close)
+
+	! Resol una equaccio diferencial de primer ordre RK4.
+	!
+	! Args (versio simple):		h:	distancia entre el següent pas
+	!							x0:	punt inicial a resoldre l'eq dif
+	!							xf: punt final a resoldre l'eq dif
+	!							y0:	valor y en x0 y0 = y(x0)
+	!							f:	funcio que esta igualda al dy/dx
+	!							name_file:	nom del arxiu (amb extensio.dat) si
+	!										es crea un arxiu.
+	!							num_file:	referencia numerica del arxiu per
+	!										tal de escriure en ell.
+	!							is_file:	"true" hi ha un arxiu obert,
+	!										"false" no hi cap arxiu obert
+	!							is_close:	"true" si al final de resoldre i
+	!										escriure els resultats, volem
+	!										tancar el arxiu. "false" el deixa
+	!										obert.
+	!										
+
+	implicit none
+
+	double precision f
+	double precision h,x0,xf,y0
+	integer num_file
+	character (len=100) name_file
+	logical is_file, is_close
+
+	integer n, count
+	double precision k1,k2,k3,k4
+	double precision xn, yn
+
+	
+	! GESTIO DE FITXERS
+	! decidim a on volem guardar els valors que anem obtenint
+	if (is_file.eqv..false.) then
+		open(num_file,file=name_file)
+	end if
+
+	! en el cas que ja hi hagi un fitxer obert escrivim 2 linies en blanc
+	if (is_file.eqv..true.) then
+		write(num_file,*)
+		write(num_file,*)
+	end if
+
+
+	! nombre d'intervals (pasos a fer) "n"
+	n = int(abs(xf-x0)/h)
+
+
+	! ALGORITME RK4
+	yn = y0
+	xn = x0
+
+	do count = 1,n
+		k1 = h*f(xn,yn)
+		k2 = h*f(xn+h/2.d0,yn+(1.d0/2.d0)*k1)
+		k3 = h*f(xn+h/2.d0,yn+(1.d0/2.d0)*k2)
+		k4 = h*f(xn+h,yn+k3)
+
+		yn = y0 + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+
+		! guardem els valors en el fitxer
+		write(num_file,*) xn, yn
+
+		xn = x0 + count*h
+		y0 = yn
+
+	end do
+
+	! si volem tanquem el arxiu
+	if (is_close.eqv..true.) then
+		close(num_file)
+	end if
+end subroutine RK4_part
+
+subroutine RK4(h,x0,xf,y0,num_eq,f1,f2,f3,f4,f5,name_file,num_file, &
+					is_file,is_close)
+
+	! Resol el sistema d'equacions diferencials proposat utilitzant un RK4.
+	!
+	! Aquesta subroutina pot arribar a calcular fins a 5 equaccions
+	! diferencials de primer ordre. Si es volguessin fer més d'aquestes 5
+	! equaccions s'hauria de modificar lleugerament.
+	!
+	! Args*:	h:	distància entre el següent pas
+	!
+	!			x0:	type:dble. Valor inicial de la variable dependent "x" el
+	!				qual volem començar a resoldre la nostre eq.diferencial.
+	!				A més, és el valor de la variable dependent el qual
+	!				l'hi apliquem les condicions incials. y0 = y(x=x0)
+	!
+	!			xf: type:dble. Valor final de la variable independent "x" el
+	!				qual volem resoldre la nostre eq.diferencial.
+	!
+	!			y0:	vector(num_eq). Conté les condicions incials de cada 
+	!				equccio diferencial (variable dependent "y") (i ordenats
+	!				per ordre). Exemple: y0(1) és la variable dependent de la
+	!				condicció inicial de la primera equacció diferencial.
+	!
+	!			num_eq:		type:int.	Nombre d'equacions diferencials de
+	!						primer ordre a resoldre en total. (Com a màxim
+	!						num_eq = 5. Per mes la subroutina no funciona.)
+	!
+	!			f1,f2,f3,f4,f5:	funcions (type:dble). Corresponen a la
+	!								terme igualat del dy/dx. El numero de cada
+	!								funcio esta associat a l'eq.diferencial que
+	!								l'hi correspon. Exemple: f1 pues es el terme:
+	!								dy1/dx = f1(x,y1,y2,y3,y4,y5,y6).
+	!
+	!							Recorda que les funcions que no utilitzis a
+	!							nivell practica també l'hi has de passar una
+	!							funcio tot i que aquestes no facin res.
+	!							Recomano que li donis una que ja has creat aixi
+	!							no n'has de crear alguna d'auxiliar.
+	!
+	!
+	!			name_file:	type:character .Nom del arxiu on hi ha d'incloure l'extensió .dat
+	!						ja que els valors calculats de les eq. diferencials
+	!						es guardaran en aquest arxiu.
+	!
+	!			num_file:	type:int .Valor el qual se l'hi assigna el arxiu al obrir-lo
+	!						i en el que ens referenciem. ex : num_file = 2,
+	!						open(2,file=name_file)
+	!
+	!			is_file:	type:logical .Indica si el arxiu s'ha creat i està obert.
+	!						"true" vol dir que el arxiu esta creat i obert.
+	!						"false" indica que no s'ha creat cap arxiu.
+	!
+	!			is_close:	type:logical .Indica si vols que un cop escrit
+	!						es tenqui el fitxer.
+	!						"true" indica que el fitxer es tancara
+	!						"false" indica que el fitxer es deixa obert (per
+	!						si volem escriure uns altres results mes endevant)
+
+	implicit none
+
+	integer num_eq, num_file
+	double precision f1,f2,f3,f4,f5
+	double precision h,x0,xf,y0(num_eq)
+	character(100) name_file
+	logical is_file, is_close
+
+	integer i, count
+
+	double precision k1,k2,k3,k4 
+	double precision l1,l2,l3,l4
+	double precision m1,m2,m3,m4
+	double precision n1,n2,n3,n4
+	double precision o1,o2,o3,o4
+
+	double precision xn
+	double precision yn1,yn2,yn3,yn4,yn5
+
+
+	! GESTIO DE FITXERS
+	! decidim a on volem guardar els valors que anem obtenint
+	if (is_file.eqv..false.) then
+		open(num_file,file=name_file)
+	end if
+
+	! en el cas que ja hi hagi un fitxer obert escrivim 2 linies en blanc
+	if (is_file.eqv..true.) then
+		write(num_file,*)
+		write(num_file,*)
+	end if
+
+
+	! nombre d'intervals (pasos a fer) "i"
+	i = int(abs(xf-x0)/h)
+
+
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	! ALGORITME RK4
+
+	! CAS 1 EQ.DIF. DE PRIMER ORDRE
+	if (num_eq.eq.1) then
+		! ALGORITME RK4
+		yn1 = y0(1)
+		xn = x0
+
+		! guardem les condicions incials al fitxer
+		write(num_file,*)xn,yn1
+
+		do count = 1,i
+			k1 = h*f1(xn,yn1)
+			k2 = h*f1(xn+h/2.d0,yn1+(k1/2.d0))
+			k3 = h*f1(xn+h/2.d0,yn1+(k2/2.d0))
+			k4 = h*f1(xn+h,yn1+k3)
+
+			yn1 = y0(1) + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+
+			xn = x0 + count*h
+
+			! guardem els valors en el fitxer
+			write(num_file,*) xn, yn1
+
+			y0(1) = yn1
+		end do
+	end if
+
+
+	! CAS 2 EQ.DIF. DE PRIMER ORDRE
+	if (num_eq.eq.2) then
+		! ALGORITME RK4
+		yn1 = y0(1)
+		yn2 = y0(2)
+		xn = x0
+
+		! guardem les condicions incials al fitxer
+		write(num_file,*)xn,yn1,yn2
+
+		do count = 1,i
+			k1 = h*f1(xn,yn1,yn2)
+			l1 = h*f2(xn,yn1,yn2)
+
+			k2 = h*f1(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0))
+			l2 = h*f2(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0))
+
+			k3 = h*f1(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0))
+			l3 = h*f2(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0))
+
+			k4 = h*f1(xn+h,yn1+k3,yn2+l3)
+			l4 = h*f2(xn+h,yn1+k3,yn2+l3)
+
+			yn1 = y0(1) + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+			yn2 = y0(2) + (1.d0/6.d0)*(l1+2.d0*l2+2.d0*l3+l4)
+			
+			xn = x0 + count*h
+
+			! guardem els valors en el fitxer
+			write(num_file,*) xn, yn1, yn2
+
+			y0(1) = yn1
+			y0(2) = yn2
+		end do
+	end if
+
+
+	! CAS 3 EQ.DIF. DE PRIMER ORDRE
+	if (num_eq.eq.3) then
+		! ALGORITME RK4
+		yn1 = y0(1)
+		yn2 = y0(2)
+		yn3 = y0(3)
+		xn = x0
+
+		! guardem les condicions incials al fitxer
+		write(num_file,*)xn,yn1,yn2,yn3
+
+		do count = 1,i
+			k1 = h*f1(xn,yn1,yn2,yn3)
+			l1 = h*f2(xn,yn1,yn2,yn3)
+			m1 = h*f3(xn,yn1,yn2,yn3)
+
+			k2 = h*f1(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0))
+			l2 = h*f2(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0))
+			m2 = h*f3(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0))
+
+			k3 = h*f1(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0))
+			l3 = h*f2(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0))
+			m3 = h*f3(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0))
+
+			k4 = h*f1(xn+h,yn1+k3,yn2+l3,yn3+m3)
+			l4 = h*f2(xn+h,yn1+k3,yn2+l3,yn3+m3)
+			m4 = h*f3(xn+h,yn1+k3,yn2+l3,yn3+m3)
+
+			yn1 = y0(1) + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+			yn2 = y0(2) + (1.d0/6.d0)*(l1+2.d0*l2+2.d0*l3+l4)
+			yn3 = y0(3) + (1.d0/6.d0)*(m1+2.d0*m2+2.d0*m3+m4)
+
+
+			xn = x0 + count*h
+
+			! guardem els valors en el fitxer
+			write(num_file,*) xn, yn1, yn2, yn3
+
+			y0(1) = yn1
+			y0(2) = yn2
+			y0(3) = yn3
+		end do
+	end if
+
+
+	! CAS 4.EQ.DIF DE PRIMER ORDRE
+	if (num_eq.eq.4) then
+		! ALGORITME RK4
+		yn1 = y0(1)
+		yn2 = y0(2)
+		yn3 = y0(3)
+		yn4 = y0(4)
+		xn = x0
+
+		! guardem les condicions incials al fitxer
+		write(num_file,*)xn,yn1,yn2,yn3,yn4
+
+		do count = 1,i
+			k1 = h*f1(xn,yn1,yn2,yn3,yn4)
+			l1 = h*f2(xn,yn1,yn2,yn3,yn4)
+			m1 = h*f3(xn,yn1,yn2,yn3,yn4)
+			n1 = h*f4(xn,yn1,yn2,yn3,yn4)
+
+			k2 = h*f1(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0))
+			l2 = h*f2(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0))
+			m2 = h*f3(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0))
+			n2 = h*f4(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0))
+
+			k3 = h*f1(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0))
+			l3 = h*f2(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0))
+			m3 = h*f3(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0))
+			n3 = h*f4(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0))
+
+			k4 = h*f1(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3)
+			l4 = h*f2(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3)
+			m4 = h*f3(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3)
+			n4 = h*f4(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3)
+
+
+			yn1 = y0(1) + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+			yn2 = y0(2) + (1.d0/6.d0)*(l1+2.d0*l2+2.d0*l3+l4)
+			yn3 = y0(3) + (1.d0/6.d0)*(m1+2.d0*m2+2.d0*m3+m4)
+			yn4 = y0(4) + (1.d0/6.d0)*(n1+2.d0*n2+2.d0*n3+n4)
+			
+
+			xn = x0 + count*h
+
+			! guardem els valors en el fitxer
+			write(num_file,*) xn, yn1, yn2, yn3, yn4
+
+			y0(1) = yn1
+			y0(2) = yn2
+			y0(3) = yn3
+			y0(4) = yn4
+		end do
+	end if
+
+
+	! CAS 5 EQ.DIF. DE PRIMER ORDRE
+	if (num_eq.eq.5) then
+		! ALGORITME RK4
+		yn1 = y0(1)
+		yn2 = y0(2)
+		yn3 = y0(3)
+		yn4 = y0(4)
+		yn5 = y0(5)
+		xn = x0
+
+		! guardem les condicions incials al fitxer
+		write(num_file,*)xn,yn1,yn2,yn3,yn4,yn5
+
+		do count = 1,i
+			k1 = h*f1(xn,yn1,yn2,yn3,yn4,yn5)
+			l1 = h*f2(xn,yn1,yn2,yn3,yn4,yn5)
+			m1 = h*f3(xn,yn1,yn2,yn3,yn4,yn5)
+			n1 = h*f4(xn,yn1,yn2,yn3,yn4,yn5)
+			o1 = h*f5(xn,yn1,yn2,yn3,yn4,yn5)
+
+
+			k2 = h*f1(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0), yn5+(o1/2.d0))
+			l2 = h*f2(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0), yn5+(o1/2.d0))
+			m2 = h*f3(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0), yn5+(o1/2.d0))
+			n2 = h*f4(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0), yn5+(o1/2.d0))
+			o2 = h*f5(xn+h/2.d0,yn1+(k1/2.d0),yn2+(l1/2.d0),yn3+(m1/2.d0), &
+						yn4+(n1/2.d0), yn5+(o1/2.d0))
+
+			k3 = h*f1(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0), yn5+(o2/2.d0))
+			l3 = h*f2(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0), yn5+(o2/2.d0))
+			m3 = h*f3(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0), yn5+(o2/2.d0))
+			n3 = h*f4(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0), yn5+(o2/2.d0))
+			o3 = h*f5(xn+h/2.d0,yn1+(k2/2.d0),yn2+(l2/2.d0),yn3+(m2/2.d0), &
+						yn4+(n2/2.d0), yn5+(o2/2.d0))
+
+			k4 = h*f1(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3,yn5+o3)
+			l4 = h*f2(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3,yn5+o3)
+			m4 = h*f3(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3,yn5+o3)
+			n4 = h*f4(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3,yn5+o3)
+			o4 = h*f4(xn+h,yn1+k3,yn2+l3,yn3+m3,yn4+n3,yn5+o3)
+
+
+
+			yn1 = y0(1) + (1.d0/6.d0)*(k1+2.d0*k2+2.d0*k3+k4)
+			yn2 = y0(2) + (1.d0/6.d0)*(l1+2.d0*l2+2.d0*l3+l4)
+			yn3 = y0(3) + (1.d0/6.d0)*(m1+2.d0*m2+2.d0*m3+m4)
+			yn4 = y0(4) + (1.d0/6.d0)*(n1+2.d0*n2+2.d0*n3+n4)
+			yn5 = y0(5) + (1.d0/6.d0)*(o1+2.d0*o2+2.d0*o3+o4)
+			
+
+			xn = x0 + count*h
+
+			! guardem els valors en el fitxer
+			write(num_file,*) xn, yn1, yn2, yn3, yn4, yn5
+
+			y0(1) = yn1
+			y0(2) = yn2
+			y0(3) = yn3
+			y0(4) = yn4
+			y0(5) = yn5
+		end do
+	end if
+	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+	! GESTIO TANCAMENT DEL ARXIU GENERAT
+	! si volem tanquem el arxiu
+	if (is_close.eqv..true.) then
+		close(num_file)
+	end if
+end subroutine RK4
+
+
+subroutine read_line_value(name_file, num_file, ncolum, nrow, pos_column, &
+				 last_value)
+
+	! Obte en memoria el valor de la fila i la columna que li diguem d'un
+	! fitxer de dades. IMPORTANT: esta dissenyada per un fitxer on hi hagi un
+	! nombre fix de columnes. 
+	!
+	! Args*: 	name_file:	type character. Nom del arxiu a obrir.
+	!
+	!			num_file: type integer. Valor amb el que s'assigna el fitxer.
+	!						ex: open(num_file,file=name_file)
+	!
+	!			ncolum:	type integer. Nombre de columnes del fitxer.
+	!
+	!			nrow:	type integer. Fila en el qual esta el valor que volem
+	!					guardar en memoria. (La primera fila=1)
+	!
+	!			pos_column:	type integer. Columna en el qual esta el valor que
+	!						volem guardar en memoria. (La primera columna=1)
+	!
+	!			last_value: type dble. Valor el qual voliem llegir i guardar
+	!						en memoria.
+	
+
+	implicit none
+
+	integer num_file, ncolum, nrow, pos_column
+	double precision last_row(ncolum)
+	double precision last_value
+	character(100) name_file
+
+	integer i
+
+	open(num_file,file=name_file,status='old')
+
+	if (ncolum.eq.1) then
+		do i = 1,nrow
+			read(num_file,*)last_row(1)
+		end do
+	end if
+		
+	if (ncolum.eq.2) then
+		do i = 1,nrow
+			read(num_file,*)last_row(1),last_row(2)
+		end do
+	end if
+
+	if (ncolum.eq.3) then
+		do i = 1,nrow
+			read(num_file,*)last_row(1),last_row(2), last_row(3)
+		end do
+	end if
+
+	if (ncolum.eq.4) then
+		do i = 1,nrow
+			read(num_file,*)last_row(1),last_row(2), last_row(3), last_row(4)
+		end do
+	end if
+
+	if (ncolum.eq.5) then
+		do i = 1,nrow
+			read(num_file,*)last_row(1),last_row(2), last_row(3), last_row(4), &
+								last_row(5)
+		end do
+	end if	
+
+
+	last_value = last_row(pos_column)
+
+	close(num_file)
+
+	return
+end subroutine read_line_value
+
+subroutine metode_tir(E1,E2,f1,f2,n,num_file,name_file,is_file,is_close)
+
+	! Realitza el metode de tir. Nomes es valida per 2 equacions dierencials
+	! de segon ordre. Si es voles per mes equacions s'hauria de modificar
+	! lleugerament.
+	!
+	! Args*:	E1:		valor inicial de l'energia en que busquem el VAP
+	!
+	!			E2:		valor final de l'energia en que busquem el VAP
+	!			
+	!			f1:		primera equaccio diferencial de primer ordre
+	!
+	!			f2:		segona equacció diferencial de segon ordre
+	!
+	!			y0:		vector de 2 dimensions on hi han les condicions
+	!					inicials per ordre.
+	!
+	!			n:		numero de passos a resoldre l'eq.dif. amb RK4.
+	!
+	!			num_file:	numero amb el qual s'assignara el arxiu on
+	!						es guardara el resultat
+	!			
+	!			name_file:	nom del arxiu on es guardaran els resultats.
+	!
+	!			is_file:	"true" si ja existeix i volem guardar els resultats
+	!						a continuacio. "false" si el arxiu encara no
+	!						existeix
+	!
+	!			is_close:	"true" si volem tancar el arxiu. Del contrari,
+	!						"false" el deixa obert			
+	!
+	!	NOTA*: quan s'utilitzi, s'ha de ficar les condicions inicials
+	!			y0 corresponent al problema que resolem. Tambe, s'ha de
+	!			modificiar x0 i xf.
+
+	implicit none
+
+	! funcions dy/dx de les eq.dif.
+	double precision f1,f2
+
+	double precision E1,E2
+	double precision E3
+	integer n
+
+	! variables per el RK4 (s'han de modificar els valors segons el problema)
+	double precision h,x0,xf,y0(2)
+	integer num_file_E1, num_file_E2,num_file_E3,num_eq
+	character(100) name_file_E1, name_file_E2, name_file_E3
+	logical is_file_E, is_close_E
+
+	! variables que corresponen al valor de l'eq.dif. en x=1
+	double precision val_E1, val_E2, val_E3
+
+	! variables que corresponen a on es voldra escriure el resultat final
+	integer num_file
+	character(100) name_file
+	logical is_file, is_close
+
+	! comptador per tal de saber les iteracions que porto
+	integer count
+
+	! common block de E
+	double precision E
+	common/constants/E
+
+	external f1,f2
+
+	! parametres dels RK4 que utilitzarem
+	x0 = 0.d0
+	xf = 1.d0
+	h = abs(x0-xf)/dble(n)
+	num_file_E1 = 114
+	num_file_E2 = 115
+	num_file_E3 = 116
+	num_eq = 2
+	name_file_E1 = 'E1.dat'
+	name_file_E2 = 'E2.dat'
+	name_file_E3 = 'E3.dat'
+	is_file_E = .false.
+	is_close_E = .true.
+
+
+	! incialitzo el contador
+	count = 0
+
+	! donc un valor random mes gran que el criteri de convergencia per tal de
+	! inicialitzar el metode
+	val_E3 = 1000.d0
+
+	! METODE DE TIR
+	do while (abs(val_E3).gt.10.d0**(-6))
+
+		! resolem les eq.dif. per RK4 per E1 i E2
+		E = E1
+		y0(1) = 0.25d0
+		y0(2) = 0.d0
+		call RK4(h,x0,xf,y0,num_eq,f1,f2,f2,f2,f2,name_file_E1,num_file_E1,is_file_E, &
+				is_close_E)
+
+		E = E2
+		! haig de tornar a escriure les condicions inicials ja que el rk4 si
+		! prove de un rk4 anterior, aquest modifica les condicions inicials.
+		y0(1) = 0.25d0
+		y0(2) = 0.d0
+		call RK4(h,x0,xf,y0,num_eq,f1,f2,f2,f2,f2,name_file_E2,num_file_E2,is_file_E, &
+				is_close_E)	
+
+
+		! valors de la solucio de l'eq.dif. per E1 i E2 en x=1
+		call read_line_value(name_file_E1,12,3,n+1,3,val_E1)
+		call read_line_value(name_file_E2,12,3,n+1,3,val_E2)
+
+		! calcul de E3
+		E3 = (E1*val_E2 -E2*val_E1)/(val_E2-val_E1)
+
+		! calculem l'eq.dif. per al valor de E3
+		E = E3
+		y0(1) = 0.25d0
+		y0(2) = 0.d0
+		call RK4(h,x0,xf,y0,num_eq,f1,f2,f2,f2,f2,name_file_E3,num_file_E3,is_file_E, &
+				is_close_E)
+
+		! valor de l'eq.dif per E3 en x=1
+		call read_line_value(name_file_E3,12,3,n+1,3,val_E3)
+
+		! si ha convergit escrivim els resultats en el fitxer que indiquem
+		if (abs(val_E3).lt.10.d0**(-6)) then
+			y0(1) = 0.25d0
+			y0(2) = 0.d0
+			call RK4(h,x0,xf,y0,num_eq,f1,f2,f2,f2,f2,name_file,num_file_E3,is_file, &
+					is_close)
+
+			! imprimim els valor de E per pantalla
+			write(*,*)"Valor de E que es solucio= ", E3
+		end if
+
+		! si encara no ha convergit recalculem les energies E1 i E2
+		if (abs(val_E3).gt.10.d0**(-6)) then
+			E1 = E2
+			E2 = E3
+		end if 
+	
+		! controlo el bucle while true per saber la iteracio en que estem
+		count = count +1
+		if (mod(count,25).eq.0) then
+			write(*,*)"Metode de tir, iteracio numero: ",count
+		end if
+
+	end do
+end subroutine metode_tir
+
+
+
+
+
+
+! funcions de l'eq.dif.Schrodinguer
+double precision function schro1(x,y1,y2)
+
+	! y1 es la solucio "dphi/dx"
+	! y2 es la solucio "phi"
+
+	implicit none
+	double precision x,y1,y2
+	double precision E
+
+	common/constants/E
+
+	schro1 = (-2.d0*E-1.d0)*y2
+	return
+end function schro1
+
+double precision function schro2(x,y1,y2)
+
+	implicit none
+	double precision x,y1,y2
+	double precision E
+
+	common/constants/E
+
+	schro2 = y1
+	return
+end function schro2
+
+
+! funcions per probar l'algoritme RK4
+double precision function f1(x,y)
+
+	implicit none
+	double precision x,y
+
+	f1 = x**4
+	return
+end function f1
+
+double precision function f2(t,v)
+
+	implicit none
+	double precision t,v
+	double precision m, g, kappa
+
+	! valors de les constants
+	g = 9.807d0
+	m = 60.d0
+	kappa = 0.25d0
+
+	f2 = g -kappa*(v**2)/m
+	return
+end function f2 
+
+! funcions per a l'oscilador acoblat de la practica 3 de PSIM
+
+double precision function fos1(x,y1,y2,y3,y4)
+
+	implicit none
+	double precision x,y1,y2,y3,y4
+	double precision k1,k2,m
+
+	! constants del problema
+	m = 1.d0
+	k1 = 10.d0
+	k2 = 0.5d0
+
+	fos1 = (k2*y4 -(k1+k2)*y3)/m
+	return
+end function fos1
+
+double precision function fos2(x,y1,y2,y3,y4)
+
+	implicit none
+	double precision x,y1,y2,y3,y4
+	double precision k1,k2,m
+
+	! constants del problema
+	m = 1.d0
+	k1 = 10.d0
+	k2 = 0.5d0
+
+	fos2 = (k2*y3 -(k1+k2)*y4)/m
+	return
+end function fos2
+
+double precision function fos3(x,y1,y2,y3,y4)
+
+	implicit none
+	double precision x,y1,y2,y3,y4
+
+	fos3 = y1
+	return
+end function fos3
+
+double precision function fos4(x,y1,y2,y3,y4)
+
+	implicit none
+	double precision x,y1,y2,y3,y4
+
+	fos4 = y2
+	return
+end function fos4
