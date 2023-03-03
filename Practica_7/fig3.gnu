@@ -1,0 +1,9 @@
+set term png
+set output "P7-22-23-fig3.png"
+
+set xlabel "phi (rad)"
+set ylabel "dphi/dt (rad/s)"
+
+
+set key right top
+plot "P7-22-23-res.dat" index 2 using 2:3 with lines title "Euler"
